@@ -11,12 +11,11 @@
 # Student side autograding was added by Brad Miller, Nick Hay, and
 # Pieter Abbeel (pabbeel@cs.berkeley.edu).
 
-
-from util import manhattanDistance
 from game import Directions
-import random, util
+import random, util, sets
 
 from game import Agent
+import pacman
 
 class ReflexAgent(Agent):
     """
@@ -53,7 +52,7 @@ class ReflexAgent(Agent):
 
     def evaluationFunction(self, currentGameState, action):
         """
-        Design a better evaluation function here.
+        Design a better evaluation function here (question 1)
 
         The evaluation function takes in the current and proposed successor
         GameStates (pacman.py) and returns a number, where higher numbers are better.
@@ -66,15 +65,52 @@ class ReflexAgent(Agent):
         Print out these variables to see what you're getting, then combine them
         to create a masterful evaluation function.
         """
-        # Useful information you can extract from a GameState (pacman.py)
-        successorGameState = currentGameState.generatePacmanSuccessor(action)
-        newPos = successorGameState.getPacmanPosition()
-        newFood = successorGameState.getFood()
-        newGhostStates = successorGameState.getGhostStates()
-        newScaredTimes = [ghostState.scaredTimer for ghostState in newGhostStates]
-
+        
         "*** YOUR CODE HERE ***"
-        return successorGameState.getScore()
+        "Useful information you can extract from a GameState (pacman.py)"
+        foods = currentGameState.getFood() # get foods at current state, not the next
+        foodCount = 0
+        
+        successorGameState = currentGameState.generatePacmanSuccessor(action)
+        pacPosition = successorGameState.getPacmanPosition()
+
+        "Find minFoodDistance b/w next state pacman and the current food map"             
+        minFoodDistance = 100000 
+        for i in range(foods.width):
+            for j in range(foods.height):
+                if foods[i][j] == True:
+                    foodCount += 1
+                    d = util.manhattanDistance([i, j], pacPosition)
+                    if d < minFoodDistance:
+                        minFoodDistance = d
+            
+        "Find minGhostDistance b/w next state pacman and next state ghost; consider scared ghosts are foods"
+        ghostStates = successorGameState.getGhostStates()
+        
+        minGhostDistance = 100000
+        for ghostState in ghostStates:
+            d = util.manhattanDistance(ghostState.getPosition(), pacPosition)
+            if d < minGhostDistance:
+                minGhostDistance = d
+                
+            if ghostState.scaredTimer > 1: # consider scared ghosts are food
+                if d < minFoodDistance:
+                    minFoodDistance = d
+
+        if minGhostDistance <= 2:
+            evaluation = minGhostDistance
+        else:
+            #evaluation = abs(minGhostDistance - minFoodDistance)
+            evaluation = minGhostDistance - 5 * minFoodDistance
+        
+#        print "===================="
+#        print "Pacman position:    ", pacPosition
+#        print "Number of food left:", foodCount
+#        print "minFoodDistance:    ", minFoodDistance
+#        print "minGhostDistance:   ", minGhostDistance
+#        print "Evaluation:         ", evaluation
+        
+        return evaluation
 
 def scoreEvaluationFunction(currentGameState):
     """
@@ -111,6 +147,35 @@ class MinimaxAgent(MultiAgentSearchAgent):
       Your minimax agent (question 2)
     """
 
+    def getMinimaxValue(self, agentState, agentIndex, ply):
+        agentCount = agentState.getNumAgents()
+        
+        if ply > agentCount * self.depth: # reach to the limited depth
+            return self.evaluationFunction(agentState)
+        
+        scores = []
+        agentIndex = agentIndex % agentCount # rotation b/w pacman and ghosts
+        agentNextMoves = agentState.getLegalActions(agentIndex)
+        
+        for action in agentNextMoves:
+            nextStateForAction = agentState.generateSuccessor(agentIndex, action)
+            value = self.getMinimaxValue(nextStateForAction, agentIndex + 1, ply + 1)
+            scores += [value]
+
+        if len(scores) < 1:
+            return self.evaluationFunction(agentState)
+        
+        if agentIndex == 0: #pacman
+            bestScore = max(scores)
+        else: # ghosts
+            bestScore = min(scores)
+            
+        # if there are more than one best
+        bestIndices = [i for i in range(len(scores)) if scores[i] == bestScore]
+        chosenIndex = random.choice(bestIndices) # Pick randomly among the best
+            
+        return scores[chosenIndex]
+        
     def getAction(self, gameState):
         """
           Returns the minimax action from the current gameState using self.depth
@@ -135,7 +200,25 @@ class MinimaxAgent(MultiAgentSearchAgent):
             Returns whether or not the game state is a losing state
         """
         "*** YOUR CODE HERE ***"
-        util.raiseNotDefined()
+        #util.raiseNotDefined()
+        
+        # Collect legal moves and successor states
+        ply = 1
+        agentIndex = 0
+        pacmanNextMoves = gameState.getLegalActions()
+
+        # Build different minimax tree for each legal move
+        scores = []
+        for action in pacmanNextMoves:
+            nextStateForAction = gameState.generateSuccessor(agentIndex, action)
+            value = self.getMinimaxValue(nextStateForAction, agentIndex + 1, ply + 1)
+            scores += [value]
+            
+        bestScore = max(scores)
+        bestIndices = [index for index in range(len(scores)) if scores[index] == bestScore]
+        chosenIndex = random.choice(bestIndices) # Pick randomly among the best
+
+        return pacmanNextMoves[chosenIndex]
 
 class AlphaBetaAgent(MultiAgentSearchAgent):
     """
@@ -176,4 +259,3 @@ def betterEvaluationFunction(currentGameState):
 
 # Abbreviation
 better = betterEvaluationFunction
-
